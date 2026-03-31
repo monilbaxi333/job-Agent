@@ -1,0 +1,82 @@
+name: Job Agent — Auto Apply
+
+on:
+  schedule:
+    - cron: '0 13 * * 1-5'   # 9 AM EST, Mon–Fri (GitHub uses UTC)
+    - cron: '0 17 * * 1-5'   # 1 PM EST, Mon–Fri (second daily run)
+  workflow_dispatch:           # allows manual trigger from GitHub UI
+    inputs:
+      target:
+        description: 'Number of applications to submit'
+        required: false
+        default: '500'
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350       # just under GitHub's 6-hour limit
+
+    steps:
+      # ── 1. Checkout repo ────────────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── 2. Restore previously applied jobs (deduplication across runs) ─────
+      - name: Restore application log cache
+        uses: actions/cache@v4
+        with:
+          path: logs/applications.jsonl
+          key: applied-log-${{ github.run_id }}
+          restore-keys: applied-log-
+
+      # ── 3. Set up Node.js ───────────────────────────────────────────────────
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # ── 4. Install dependencies ─────────────────────────────────────────────
+      - name: Install dependencies
+        run: npm ci
+
+      # ── 5. Install Playwright + Chromium ────────────────────────────────────
+      - name: Install Playwright browsers
+        run: npx playwright install chromium --with-deps
+
+      # ── 6. Write secrets into config ────────────────────────────────────────
+      - name: Write credentials
+        run: |
+          mkdir -p data
+          echo '${{ secrets.LINKEDIN_SESSION }}' > data/session.json
+        # LINKEDIN_SESSION = the contents of data/session.json after running
+        #   npm run save-session locally. Paste the JSON as a GitHub secret.
+
+      # ── 7. Write resume PDF from secret ─────────────────────────────────────
+      - name: Restore resume PDF
+        run: |
+          echo '${{ secrets.RESUME_PDF_BASE64 }}' | base64 -d > data/Monil_Baxi_2026_Final.pdf
+        # RESUME_PDF_BASE64 = base64 of your PDF:  base64 -i resume.pdf | pbcopy
+
+      # ── 8. Run the agent ────────────────────────────────────────────────────
+      - name: Run job agent
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          LINKEDIN_EMAIL:    ${{ secrets.LINKEDIN_EMAIL }}
+          LINKEDIN_PASSWORD: ${{ secrets.LINKEDIN_PASSWORD }}
+          DAILY_TARGET:      ${{ github.event.inputs.target || '500' }}
+        run: npm start
+
+      # ── 9. Upload logs as artifact (view results in GitHub UI) ──────────────
+      - name: Upload application log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: applications-${{ github.run_id }}
+          path: logs/
+          retention-days: 30
+
+      # ── 10. Post summary to job run ─────────────────────────────────────────
+      - name: Print summary
+        if: always()
+        run: node src/stats.js >> $GITHUB_STEP_SUMMARY
