@@ -6,7 +6,7 @@
 const { chromium } = require('playwright');
 const { LinkedInApplier } = require('./platforms/linkedin');
 const { GreenhouseApplier } = require('./platforms/greenhouse');
-const { LeverApplier } = require('./platforms/lever');
+const { GreenhouseApplier, LeverApplier } = require('./platforms/greenhouse');
 const { CoverLetterGenerator } = require('./coverLetter');
 const { Logger } = require('./logger');
 const config = require('../config/profile');
