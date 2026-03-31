@@ -30,15 +30,34 @@ class JobAgent {
       args: ['--no-sandbox', '--disable-setuid-sandbox'],
     });
 
-    this.context = await this.browser.newContext({
-      userAgent:
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) ' +
-        'AppleWebKit/537.36 (KHTML, like Gecko) ' +
-        'Chrome/120.0.0.0 Safari/537.36',
-      viewport: { width: 1280, height: 800 },
-      // Load saved cookies/session so you stay logged in
-      storageState: config.sessionFile ?? undefined,
-    });
+    // Only load session if file exists and is valid JSON
+let storageState = undefined;
+const fs = require('fs');
+if (config.sessionFile && fs.existsSync(config.sessionFile)) {
+  try {
+    const raw = fs.readFileSync(config.sessionFile, 'utf8').trim();
+    if (raw && raw.startsWith('{')) {
+      JSON.parse(raw); // validate
+      storageState = config.sessionFile;
+      this.logger.info('✅ Session file loaded');
+    } else {
+      this.logger.info('⚠️  Session file empty — will log in fresh');
+    }
+  } catch (e) {
+    this.logger.info('⚠️  Session file corrupt — will log in fresh');
+  }
+} else {
+  this.logger.info('⚠️  No session file — will log in fresh');
+}
+
+this.context = await this.browser.newContext({
+  userAgent:
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) ' +
+    'AppleWebKit/537.36 (KHTML, like Gecko) ' +
+    'Chrome/120.0.0.0 Safari/537.36',
+  viewport: { width: 1280, height: 800 },
+  storageState,
+});
 
     this.coverLetterGen = new CoverLetterGenerator(config.profile);
     this.logger.info('✅ Browser initialized');
@@ -46,7 +65,9 @@ class JobAgent {
 
   async run() {
     await this.init();
-
+    // Log in to platforms
+    const linkedIn = new LinkedInApplier(this.context, config, this.logger);
+    await linkedIn.login();
     const platforms = [
       new LinkedInApplier(this.context, config, this.logger),
       new GreenhouseApplier(this.context, config, this.logger),
