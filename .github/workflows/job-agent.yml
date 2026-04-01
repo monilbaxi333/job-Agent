@@ -48,9 +48,8 @@ jobs:
       - name: Write credentials
         run: |
           mkdir -p data logs
-          echo '${{ secrets.LINKEDIN_SESSION }}' > data/session.json
-        # LINKEDIN_SESSION = the contents of data/session.json after running
-        #   npm run save-session locally. Paste the JSON as a GitHub secret.
+          echo '${{ secrets.LINKEDIN_SESSION }}' | base64 --decode > data/session.json
+          python3 -c "import json,sys; json.load(open('data/session.json')); print('✅ Session valid')"
 
       # ── 8. Run the agent ────────────────────────────────────────────────────
       - name: Run job agent
