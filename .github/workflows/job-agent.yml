@@ -52,12 +52,6 @@ jobs:
         # LINKEDIN_SESSION = the contents of data/session.json after running
         #   npm run save-session locally. Paste the JSON as a GitHub secret.
 
-      # ── 7. Write resume PDF from secret ─────────────────────────────────────
-      - name: Restore resume PDF
-        run: |
-          echo '${{ secrets.RESUME_PDF_BASE64 }}' | base64 --decode > data/Monil_Baxi_2026_Final.pdf
-        # RESUME_PDF_BASE64 = base64 of your PDF:  base64 -i resume.pdf | pbcopy
-
       # ── 8. Run the agent ────────────────────────────────────────────────────
       - name: Run job agent
         env:

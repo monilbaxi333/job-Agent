@@ -1,6 +1,5 @@
 node_modules/
 data/session.json
-data/*.pdf
 .env
 logs/
 .DS_Store
