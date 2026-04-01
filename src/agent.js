@@ -66,8 +66,8 @@ this.context = await this.browser.newContext({
   async run() {
     await this.init();
     // Log in to platforms
-    const linkedIn = new LinkedInApplier(this.context, config, this.logger);
-    await linkedIn.login();
+    // const linkedIn = new LinkedInApplier(this.context, config, this.logger);
+    // await linkedIn.login();
     const platforms = [
       new LinkedInApplier(this.context, config, this.logger),
       new GreenhouseApplier(this.context, config, this.logger),
