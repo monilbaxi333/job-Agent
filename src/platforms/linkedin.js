@@ -29,7 +29,7 @@ class LinkedInApplier extends BasePlatform {
 
     try {
       const keywords = encodeURIComponent(this.config.keywords.join(' '));
-      const location  = encodeURIComponent(this.config.location);
+      const location = encodeURIComponent(this.config.location);
 
       // f_AL = Easy Apply filter, f_WT=2 = Remote
       const url =
@@ -37,27 +37,28 @@ class LinkedInApplier extends BasePlatform {
         `&location=${location}&f_AL=true&f_WT=2&sortBy=DD`;
 
       await page.goto(url, { waitUntil: 'domcontentloaded' });
-      await page.waitForSelector('.jobs-search__results-list', { timeout: 10000 });
+      await page.waitForSelector('[data-job-id], [data-occludable-job-id]', { timeout: 10000 });
 
       // Scroll to load more listings
       await this.autoScroll(page);
 
       const listings = await page.$$eval(
-        '.jobs-search__results-list li',
+        'li.jobs-search-results__list-item, li.scaffold-layout__list-item',
         (items) =>
           items.map((el) => ({
-            id:       el.querySelector('[data-job-id]')?.dataset.jobId,
-            title:    el.querySelector('.job-card-list__title')?.innerText?.trim(),
-            company:  el.querySelector('.job-card-container__company-name')?.innerText?.trim(),
+            id: el.querySelector('[data-job-id]')?.dataset.jobId ||
+              el.querySelector('[data-occludable-job-id]')?.dataset.occludableJobId,
+            title: el.querySelector('.job-card-list__title, .job-card-container__link')?.innerText?.trim(),
+            company: el.querySelector('.job-card-container__company-name, .job-card-container__primary-description')?.innerText?.trim(),
             location: el.querySelector('.job-card-container__metadata-item')?.innerText?.trim(),
-            link:     el.querySelector('a.job-card-list__title')?.href,
+            link: el.querySelector('a[href*="/jobs/view"]')?.href,
           }))
-          .filter((j) => j.id && j.title)
-      );
+            .filter((j) => j.id && j.title && j.link)
+      )
 
       // Score each job against profile
       for (const job of listings) {
-        job.platform   = 'LinkedIn';
+        job.platform = 'LinkedIn';
         job.matchScore = this.scoreJob(job);
         jobs.push(job);
       }
@@ -92,7 +93,7 @@ class LinkedInApplier extends BasePlatform {
 
         // Check for Next / Review / Submit buttons
         const submitBtn = page.locator('button[aria-label="Submit application"]');
-        const nextBtn   = page.locator('button[aria-label="Continue to next step"]');
+        const nextBtn = page.locator('button[aria-label="Continue to next step"]');
         const reviewBtn = page.locator('button[aria-label="Review your application"]');
 
         if (await submitBtn.isVisible()) {
@@ -127,7 +128,7 @@ class LinkedInApplier extends BasePlatform {
   async fillContactInfo(page) {
     const p = this.config.profile;
     await this.safeType(page, 'input[id*="phoneNumber"]', p.phone);
-    await this.safeType(page, 'input[id*="city"]',        p.city);
+    await this.safeType(page, 'input[id*="city"]', p.city);
   }
 
   async fillWorkExperience(page) {
@@ -142,7 +143,7 @@ class LinkedInApplier extends BasePlatform {
   async fillScreeningQuestions(page) {
     // Yes/No radio buttons — default to "Yes" for positive questions
     const yesRadios = await page.$$('input[type="radio"][value="Yes"]');
-    for (const r of yesRadios) await r.check().catch(() => {});
+    for (const r of yesRadios) await r.check().catch(() => { });
 
     // Dropdowns — pick first non-empty option if unanswered
     const selects = await page.$$('select');
@@ -192,7 +193,7 @@ class LinkedInApplier extends BasePlatform {
       if (await el.isVisible()) {
         await el.fill(String(value));
       }
-    } catch (_) {}
+    } catch (_) { }
   }
 }
 
