@@ -25,12 +25,12 @@ class GreenhouseApplier extends BasePlatform {
         const combined = (job.title + ' ' + job.description).toLowerCase();
         if (!keywords.some(k => combined.includes(k))) continue;
         jobs.push({
-          id:         job.slug || job.url,
-          title:      job.title,
-          company:    job.company_name,
-          location:   job.location,
-          link:       job.url,
-          platform:   'Greenhouse',
+          id: job.slug || job.url,
+          title: job.title,
+          company: job.company_name,
+          location: job.location,
+          link: job.url,
+          platform: 'Greenhouse',
           matchScore: this.scoreJob({ title: job.title, description: job.description }),
         });
       }
@@ -48,9 +48,9 @@ class GreenhouseApplier extends BasePlatform {
     try {
       await page.goto(job.link, { waitUntil: 'domcontentloaded', timeout: 15000 });
       await this.safeType(page, '#first_name', p.firstName);
-      await this.safeType(page, '#last_name',  p.lastName);
-      await this.safeType(page, '#email',      p.email);
-      await this.safeType(page, '#phone',      p.phone);
+      await this.safeType(page, '#last_name', p.lastName);
+      await this.safeType(page, '#email', p.email);
+      await this.safeType(page, '#phone', p.phone);
       await this.safeType(page, '#job_application_answers_attributes_0_text_value', coverLetter);
       await this.safeType(page, 'input[placeholder*="LinkedIn"]', p.linkedIn);
       const upload = page.locator('input[type="file"]').first();
@@ -76,7 +76,7 @@ class GreenhouseApplier extends BasePlatform {
     try {
       const el = page.locator(selector).first();
       if (await el.isVisible({ timeout: 2000 })) await el.fill(String(value ?? ''));
-    } catch (_) {}
+    } catch (_) { }
   }
 }
 
@@ -91,20 +91,31 @@ class LeverApplier extends BasePlatform {
     const page = await this.context.newPage();
     const jobs = [];
     try {
-      const keyword = encodeURIComponent(this.config.keywords[0] || 'software engineer');
-      await page.goto(`https://remotive.com/api/remote-jobs?search=${keyword}&limit=50`, {
-        waitUntil: 'domcontentloaded', timeout: 15000
-      });
-      const text = await page.textContent('body');
-      const data = JSON.parse(text);
-      for (const job of (data.jobs || [])) {
+      const allJobs = [];
+      for (const kw of this.config.keywords.slice(0, 3)) {
+        try {
+          const keyword = encodeURIComponent(kw);
+          await page.goto(`https://remotive.com/api/remote-jobs?search=${keyword}&limit=30`, {
+            waitUntil: 'domcontentloaded', timeout: 15000
+          });
+          const text = await page.textContent('body');
+          const data = JSON.parse(text);
+          allJobs.push(...(data.jobs || []));
+          await page.waitForTimeout(600);
+        } catch (_) { }
+      }
+      // Deduplicate
+      const seen = new Set();
+      for (const job of allJobs) {
+        if (seen.has(job.id)) continue;
+        seen.add(job.id);
         jobs.push({
-          id:         String(job.id),
-          title:      job.title,
-          company:    job.company_name,
-          location:   job.candidate_required_location || 'Remote',
-          link:       job.url,
-          platform:   'Lever',
+          id: String(job.id),
+          title: job.title,
+          company: job.company_name,
+          location: job.candidate_required_location || 'Remote',
+          link: job.url,
+          platform: 'Lever',
           matchScore: this.scoreJob({ title: job.title, description: job.description }),
         });
       }
@@ -122,11 +133,11 @@ class LeverApplier extends BasePlatform {
     try {
       const applyUrl = job.link.replace(/\?.*$/, '') + '/apply';
       await page.goto(applyUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
-      await this.safeType(page, 'input[name="name"]',            `${p.firstName} ${p.lastName}`);
-      await this.safeType(page, 'input[name="email"]',           p.email);
-      await this.safeType(page, 'input[name="phone"]',           p.phone);
-      await this.safeType(page, 'input[name="urls[LinkedIn]"]',  p.linkedIn);
-      await this.safeType(page, 'textarea[name="comments"]',     coverLetter);
+      await this.safeType(page, 'input[name="name"]', `${p.firstName} ${p.lastName}`);
+      await this.safeType(page, 'input[name="email"]', p.email);
+      await this.safeType(page, 'input[name="phone"]', p.phone);
+      await this.safeType(page, 'input[name="urls[LinkedIn]"]', p.linkedIn);
+      await this.safeType(page, 'textarea[name="comments"]', coverLetter);
       const upload = page.locator('input[type="file"]').first();
       if (await upload.isVisible({ timeout: 2000 }).catch(() => false)) {
         await upload.setInputFiles(this.config.resumePath);
@@ -150,7 +161,7 @@ class LeverApplier extends BasePlatform {
     try {
       const el = page.locator(selector).first();
       if (await el.isVisible({ timeout: 2000 })) await el.fill(String(value ?? ''));
-    } catch (_) {}
+    } catch (_) { }
   }
 }
 

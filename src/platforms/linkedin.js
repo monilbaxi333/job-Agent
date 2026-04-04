@@ -41,7 +41,7 @@ class LinkedInApplier extends BasePlatform {
         await page.waitForSelector('[data-job-id], [data-occludable-job-id], .jobs-search-results__list', { timeout: 20000 });
       }
       catch (_) {
-        this.logger.warn('LinkedIn: job list selector not found, returning 0 jobs');
+        this.logger.info('⚠️  LinkedIn: job list selector not found, returning 0 jobs');
         return [];
       }
 

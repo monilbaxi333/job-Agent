@@ -5,9 +5,9 @@
 class BasePlatform {
   constructor(context, config, logger) {
     this.context = context;
-    this.config  = config;
-    this.logger  = logger;
-    this.name    = 'Base';
+    this.config = config;
+    this.logger = logger;
+    this.name = 'Base';
   }
 
   /**
@@ -15,40 +15,50 @@ class BasePlatform {
    */
   scoreJob(job) {
     const text = `${job.title} ${job.description || ''}`.toLowerCase();
+    const title = (job.title || '').toLowerCase();
     const keywords = this.config.keywords.map(k => k.toLowerCase());
 
-    let score = 50; // baseline
+    // ── Hard filters ──────────────────────────────────────────────────────────
 
-    // Keyword matches
+    // Block senior/lead titles
+    const blocklist = this.config.titleBlocklist || [];
+    if (blocklist.some(b => title.includes(b))) return 0;
+
+    // Require visa sponsorship mention if enabled
+    if (this.config.requireVisa) {
+      const visaKws = this.config.visaKeywords || [];
+      const mentionsVisa = visaKws.some(v => text.includes(v));
+      if (!mentionsVisa) return 0;
+    }
+
+    // ── Scoring ───────────────────────────────────────────────────────────────
+
+    let score = 50;
+
     let hits = 0;
     for (const kw of keywords) {
       if (text.includes(kw)) hits++;
     }
-    score += Math.min(hits * 5, 30); // up to +30 for keyword hits
+    score += Math.min(hits * 5, 30);
 
-    // Seniority alignment
-    const level = this.config.profile.level.toLowerCase();
-    if (level === 'mid-level') {
-      if (/senior|staff|principal|lead/.test(text)) score -= 15;
-      if (/junior|associate|intern/.test(text))      score -= 10;
-    }
-    if (level === 'senior') {
-      if (/junior|associate|intern/.test(text))      score -= 20;
-      if (/senior|staff/.test(text))                 score += 10;
-    }
+    // Entry-level / junior signals
+    if (/junior|entry.?level|associate|new grad|0-2 years|1-2 years|early career/.test(text)) score += 15;
+
+    // Seniority penalty
+    if (/senior|staff|principal|lead|director|manager/.test(text)) score -= 20;
 
     // Role type bonus
     if (text.includes('full stack') || text.includes('full-stack')) score += 10;
-    if (text.includes('backend'))                                    score += 8;
-    if (text.includes('node') || text.includes('react'))            score += 7;
+    if (text.includes('backend')) score += 8;
+    if (text.includes('node') || text.includes('react')) score += 7;
 
     return Math.max(0, Math.min(100, Math.round(score)));
   }
 
   // Subclasses must implement these
-  async login()      { throw new Error(`${this.name}.login() not implemented`); }
+  async login() { throw new Error(`${this.name}.login() not implemented`); }
   async searchJobs() { throw new Error(`${this.name}.searchJobs() not implemented`); }
-  async apply()      { throw new Error(`${this.name}.apply() not implemented`); }
+  async apply() { throw new Error(`${this.name}.apply() not implemented`); }
 }
 
 module.exports = { BasePlatform };
