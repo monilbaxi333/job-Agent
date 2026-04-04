@@ -24,56 +24,26 @@ class LinkedInApplier extends BasePlatform {
   }
 
   async searchJobs() {
-    const page = await this.context.newPage();
-    const jobs = [];
+  const jobs = [];
 
+  for (const kw of this.config.keywords.slice(0, 3)) {
     try {
-      const keywords = encodeURIComponent(this.config.keywords.join(' '));
-      const location = encodeURIComponent(this.config.location);
-
-      // f_AL = Easy Apply filter, f_WT=2 = Remote
-      const url =
-        `${this.baseUrl}/jobs/search/?keywords=${keywords}` +
-        `&location=${location}&f_AL=true&f_WT=2&sortBy=DD`;
-
-      await page.goto(url, { waitUntil: 'domcontentloaded' });
-      try {
-        await page.waitForSelector('[data-job-id], [data-occludable-job-id], .jobs-search-results__list', { timeout: 20000 });
+      const res = await fetch(`https://remotive.com/api/remote-jobs?search=${encodeURIComponent(kw)}&limit=20`);
+      const data = await res.json();
+      for (const job of (data.jobs || [])) {
+        const score = this.scoreJob({ title: job.title, description: job.description });
+        if (score === 0) continue;
+        jobs.push({ id: `remotive-${job.id}`, title: job.title, company: job.company_name,
+          location: job.candidate_required_location || 'Remote', link: job.url,
+          platform: 'Lever', matchScore: score });
       }
-      catch (_) {
-        this.logger.info('⚠️  LinkedIn: job list selector not found, returning 0 jobs');
-        return [];
-      }
-
-      // Scroll to load more listings
-      await this.autoScroll(page);
-
-      const listings = await page.$$eval(
-        'li.jobs-search-results__list-item, li.scaffold-layout__list-item',
-        (items) =>
-          items.map((el) => ({
-            id: el.querySelector('[data-job-id]')?.dataset.jobId ||
-              el.querySelector('[data-occludable-job-id]')?.dataset.occludableJobId,
-            title: el.querySelector('.job-card-list__title, .job-card-container__link')?.innerText?.trim(),
-            company: el.querySelector('.job-card-container__company-name, .job-card-container__primary-description')?.innerText?.trim(),
-            location: el.querySelector('.job-card-container__metadata-item')?.innerText?.trim(),
-            link: el.querySelector('a[href*="/jobs/view"]')?.href,
-          }))
-            .filter((j) => j.id && j.title && j.link)
-      )
-
-      // Score each job against profile
-      for (const job of listings) {
-        job.platform = 'LinkedIn';
-        job.matchScore = this.scoreJob(job);
-        jobs.push(job);
-      }
-    } finally {
-      await page.close();
-    }
-
-    return jobs.sort((a, b) => b.matchScore - a.matchScore);
+    } catch (err) { this.logger.error(`Remotive fetch error: ${err.message}`); }
   }
+
+  const seen = new Set();
+  return jobs.filter(j => seen.has(j.id) ? false : seen.add(j.id))
+             .sort((a, b) => b.matchScore - a.matchScore);
+}
 
   async apply(job, coverLetter) {
     const page = await this.context.newPage();

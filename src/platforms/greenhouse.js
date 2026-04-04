@@ -7,46 +7,46 @@ class GreenhouseApplier extends BasePlatform {
   }
 
   async searchJobs() {
-    const page = await this.context.newPage();
     const jobs = [];
-    try {
-      // Jobicy — free API with entry-level roles
-      for (const kw of this.config.keywords.slice(0, 3)) {
-        try {
-          const tag = encodeURIComponent(kw.toLowerCase().replace(/\s+/g, '-'));
-          await page.goto(`https://jobicy.com/api/v2/remote-jobs?tag=${tag}&count=20`, {
-            waitUntil: 'domcontentloaded', timeout: 15000,
-          });
-          const data = JSON.parse(await page.textContent('body'));
-          for (const job of (data.jobs || [])) {
-            const score = this.scoreJob({ title: job.jobTitle, description: job.jobDescription });
-            if (score === 0) continue;
-            jobs.push({ id: `jobicy-${job.id}`, title: job.jobTitle, company: job.companyName,
-              location: job.jobGeo || 'Remote', link: job.url, platform: 'Greenhouse', matchScore: score });
-          }
-          await page.waitForTimeout(500);
-        } catch (_) {}
-      }
-      // Arbeitnow fallback
+    const keywords = this.config.keywords.map(k => k.toLowerCase());
+
+    // Jobicy free API — no auth, has entry-level roles
+    const jobicyTags = ['node', 'react', 'javascript', 'typescript', 'backend'];
+    for (const tag of jobicyTags) {
       try {
-        await page.goto('https://arbeitnow.com/api/job-board-api', { waitUntil: 'domcontentloaded', timeout: 15000 });
-        const data = JSON.parse(await page.textContent('body'));
-        const keywords = this.config.keywords.map(k => k.toLowerCase());
-        for (const job of (data.data || []).slice(0, 100)) {
-          const combined = (job.title + ' ' + (job.description || '')).toLowerCase();
-          if (!keywords.some(k => combined.includes(k))) continue;
-          const score = this.scoreJob({ title: job.title, description: job.description });
+        const res = await fetch(`https://jobicy.com/api/v2/remote-jobs?tag=${tag}&count=20&geo=usa`);
+        const data = await res.json();
+        for (const job of (data.jobs || [])) {
+          const score = this.scoreJob({ title: job.jobTitle, description: job.jobDescription });
           if (score === 0) continue;
-          jobs.push({ id: job.slug || job.url, title: job.title, company: job.company_name,
-            location: job.location, link: job.url, platform: 'Greenhouse', matchScore: score });
+          jobs.push({
+            id: `jobicy-${job.id}`, title: job.jobTitle, company: job.companyName,
+            location: job.jobGeo || 'Remote', link: job.url, platform: 'Greenhouse', matchScore: score,
+          });
         }
-      } catch (_) {}
-    } finally {
-      await page.close();
+        this.logger.info(`Jobicy [${tag}]: ${(data.jobs || []).length} raw jobs`);
+      } catch (err) { this.logger.error(`Jobicy fetch error (${kw}): ${err.message}`); }
     }
+
+    // Arbeitnow fallback
+    try {
+      const res = await fetch('https://arbeitnow.com/api/job-board-api');
+      const data = await res.json();
+      for (const job of (data.data || []).slice(0, 100)) {
+        const combined = (job.title + ' ' + (job.description || '')).toLowerCase();
+        if (!keywords.some(k => combined.includes(k))) continue;
+        const score = this.scoreJob({ title: job.title, description: job.description });
+        if (score === 0) continue;
+        jobs.push({
+          id: job.slug || job.url, title: job.title, company: job.company_name,
+          location: job.location, link: job.url, platform: 'Greenhouse', matchScore: score,
+        });
+      }
+    } catch (err) { this.logger.error(`Arbeitnow fetch error: ${err.message}`); }
+
     const seen = new Set();
     return jobs.filter(j => seen.has(j.id) ? false : seen.add(j.id))
-               .sort((a, b) => b.matchScore - a.matchScore);
+      .sort((a, b) => b.matchScore - a.matchScore);
   }
 
   async apply(job, coverLetter) {
@@ -78,7 +78,7 @@ class GreenhouseApplier extends BasePlatform {
     try {
       const el = page.locator(selector).first();
       if (await el.isVisible({ timeout: 2000 })) await el.fill(String(value ?? ''));
-    } catch (_) {}
+    } catch (_) { }
   }
 }
 
@@ -89,49 +89,30 @@ class LeverApplier extends BasePlatform {
   }
 
   async searchJobs() {
-    const page = await this.context.newPage();
     const jobs = [];
-    try {
-      // Remotive
-      for (const kw of this.config.keywords.slice(0, 3)) {
-        try {
-          await page.goto(`https://remotive.com/api/remote-jobs?search=${encodeURIComponent(kw)}&limit=20`, {
-            waitUntil: 'domcontentloaded', timeout: 15000,
+
+    // Remotive free API
+    const remotiveTags = ['node', 'react', 'full-stack', 'backend', 'javascript'];
+    for (const tag of remotiveTags) {
+      try {
+        const res = await fetch(`https://remotive.com/api/remote-jobs?search=${tag}&limit=20`);
+        const data = await res.json();
+        for (const job of (data.jobs || [])) {
+          const score = this.scoreJob({ title: job.title, description: job.description });
+          if (score === 0) continue;
+          jobs.push({
+            id: `remotive-${job.id}`, title: job.title, company: job.company_name,
+            location: job.candidate_required_location || 'Remote', link: job.url,
+            platform: 'Lever', matchScore: score,
           });
-          const data = JSON.parse(await page.textContent('body'));
-          for (const job of (data.jobs || [])) {
-            const score = this.scoreJob({ title: job.title, description: job.description });
-            if (score === 0) continue;
-            jobs.push({ id: `remotive-${job.id}`, title: job.title, company: job.company_name,
-              location: job.candidate_required_location || 'Remote', link: job.url,
-              platform: 'Lever', matchScore: score });
-          }
-          await page.waitForTimeout(700);
-        } catch (_) {}
-      }
-      // Jobicy second source
-      for (const kw of this.config.keywords.slice(0, 2)) {
-        try {
-          const tag = encodeURIComponent(kw.toLowerCase().replace(/\s+/g, '-'));
-          await page.goto(`https://jobicy.com/api/v2/remote-jobs?tag=${tag}&count=15`, {
-            waitUntil: 'domcontentloaded', timeout: 15000,
-          });
-          const data = JSON.parse(await page.textContent('body'));
-          for (const job of (data.jobs || [])) {
-            const score = this.scoreJob({ title: job.jobTitle, description: job.jobDescription });
-            if (score === 0) continue;
-            jobs.push({ id: `jobicy2-${job.id}`, title: job.jobTitle, company: job.companyName,
-              location: job.jobGeo || 'Remote', link: job.url, platform: 'Lever', matchScore: score });
-          }
-          await page.waitForTimeout(700);
-        } catch (_) {}
-      }
-    } finally {
-      await page.close();
+        }
+        this.logger.info(`Remotive [${tag}]: ${(data.jobs || []).length} raw jobs`);
+      } catch (err) { this.logger.error(`Remotive fetch error (${kw}): ${err.message}`); }
     }
+
     const seen = new Set();
     return jobs.filter(j => seen.has(j.id) ? false : seen.add(j.id))
-               .sort((a, b) => b.matchScore - a.matchScore);
+      .sort((a, b) => b.matchScore - a.matchScore);
   }
 
   async apply(job, coverLetter) {
@@ -163,7 +144,7 @@ class LeverApplier extends BasePlatform {
     try {
       const el = page.locator(selector).first();
       if (await el.isVisible({ timeout: 2000 })) await el.fill(String(value ?? ''));
-    } catch (_) {}
+    } catch (_) { }
   }
 }
 
