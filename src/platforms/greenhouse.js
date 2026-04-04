@@ -54,6 +54,8 @@ class GreenhouseApplier extends BasePlatform {
     const p = this.config.profile;
     try {
       await page.goto(job.link, { waitUntil: 'domcontentloaded', timeout: 15000 });
+      //await page.goto(job.link, { waitUntil: 'domcontentloaded', timeout: 15000 });
+      this.logger.info(`🔗 Applying at: ${job.link}`);
       await this.safeType(page, '#first_name', p.firstName);
       await this.safeType(page, '#last_name', p.lastName);
       await this.safeType(page, '#email', p.email);
