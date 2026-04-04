@@ -3,3 +3,4 @@ data/session.json
 .env
 logs/
 .DS_Store
+*.txt
