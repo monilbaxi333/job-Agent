@@ -8,7 +8,7 @@ module.exports = {
   dailyTarget: 1000,     // applications per day
   headless: true,     // false = watch the browser work
   slowMo: 60,       // ms between actions (higher = more human-like)
-  minMatchScore: 65,       // skip jobs below this AI match score (0–100)
+  minMatchScore: 30,       // skip jobs below this AI match score (0–100)
   sessionFile: './data/session.json',  // saved login cookies
 
   // ── Your credentials (store in .env in production!) ─────────────────────────
@@ -65,13 +65,14 @@ module.exports = {
     'planetscale', 'retool', 'rippling', 'scale ai',
   ],
   // Add these to your config export:
-  titleBlocklist: [
-    'senior', 'sr.', 'sr ', 'lead', 'principal', 'staff', 'director',
-    'manager', 'head of', 'vp ', 'vice president', 'architect'
-  ],
+ titleBlocklist: [
+  'senior', 'sr.', '(sr)', 'lead developer', 'lead engineer',
+  'principal', 'staff engineer', 'director', 'manager',
+  'head of', 'vp of', 'vice president', 'architect'
+],
   visaKeywords: [
     'visa sponsorship', 'sponsor visa', 'will sponsor', 'h1b', 'h-1b',
     'work authorization', 'visa support'
   ],
-  requireVisa: true,   // set false to get more jobs while testing
+  requireVisa: false,   // set false to get more jobs while testing
 };

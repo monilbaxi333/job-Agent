@@ -18,17 +18,20 @@ class BasePlatform {
     const title = (job.title || '').toLowerCase();
     const keywords = this.config.keywords.map(k => k.toLowerCase());
 
-    // ── Hard filters ──────────────────────────────────────────────────────────
-
-    // Block senior/lead titles
     const blocklist = this.config.titleBlocklist || [];
-    if (blocklist.some(b => title.includes(b))) return 0;
+    const blocked = blocklist.find(b => title.includes(b));
+    if (blocked) {
+      this.logger.info(`🚫 Blocked "${job.title}" — matched blocklist: "${blocked}"`);
+      return 0;
+    }
 
-    // Require visa sponsorship mention if enabled
     if (this.config.requireVisa) {
       const visaKws = this.config.visaKeywords || [];
       const mentionsVisa = visaKws.some(v => text.includes(v));
-      if (!mentionsVisa) return 0;
+      if (!mentionsVisa) {
+        this.logger.info(`🚫 Skipped "${job.title}" — no visa mention`);
+        return 0;
+      }
     }
 
     // ── Scoring ───────────────────────────────────────────────────────────────
