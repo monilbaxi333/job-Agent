@@ -1,17 +1,52 @@
 const { BasePlatform } = require('./base');
 
-const SUPPORTED_ATS = [
-  'greenhouse.io',
-  'lever.co',
-  'ashbyhq.com',
-  'jobs.ashby',
-  'workable.com',
-  'smartrecruiters.com',
+// Companies with public Greenhouse job boards
+const GREENHOUSE_COMPANIES = [
+  'stripe', 'notion', 'linear', 'supabase', 'retool', 'rippling',
+  'vercel', 'render', 'railway', 'neon', 'clerk', 'resend',
+  'brex', 'ramp', 'mercury', 'deel', 'remote', 'gusto', 'justworks',
+  'figma', 'loom', 'miro', 'coda',
+  'datadog', 'grafana', 'sentry', 'highlight', 'axiom',
+  'prisma', 'temporal', 'inngest',
+  'openai', 'anthropic', 'cohere', 'replicate', 'modal',
+  'gitlab', 'postman',
+  'algolia', 'elastic', 'mongodb',
+  'hashicorp', 'pulumi',
+  'auth0', 'okta', 'stytch',
+  'twilio', 'sendgrid',
+  'cloudflare', 'fastly',
+  'airtable', 'webflow', 'framer',
+  'intercom', 'front', 'helpscout',
+  'amplitude', 'mixpanel', 'posthog', 'heap',
+  'segment', 'rudderstack', 'census', 'hightouch',
+  'contentful', 'sanity',
+  'zapier', 'make',
+  'liveblocks', 'ably', 'pusher',
+  'netlify', 'fly',
 ];
 
-function isSupported(link) {
-  return SUPPORTED_ATS.some(ats => link.includes(ats));
-}
+// Companies with public Lever job boards
+const LEVER_COMPANIES = [
+  'netflix', 'lyft', 'doordash', 'instacart',
+  'robinhood', 'coinbase', 'kraken', 'gemini',
+  'plaid', 'modern-treasury', 'increase',
+  'scale', 'labelbox', 'huggingface',
+  'airtable', 'webflow', 'framer',
+  'intercom', 'front', 'plain', 'helpscout',
+  'amplitude', 'mixpanel', 'posthog', 'june', 'heap',
+  'segment', 'rudderstack', 'census', 'hightouch',
+  'contentful', 'sanity', 'storyblok',
+  'zapier', 'tray', 'activepieces',
+  'liveblocks', 'ably', 'pusher',
+  'vercel', 'netlify', 'fly', 'railway',
+  'brex', 'ramp', 'mercury', 'airbase',
+  'lattice', 'deel', 'remote', 'gusto',
+  'figma', 'loom', 'miro',
+  'datadog', 'sentry', 'highlight',
+  'algolia', 'elastic',
+  'cloudflare', 'fastly',
+  'stripe', 'plaid', 'finix',
+];
 
 class GreenhouseApplier extends BasePlatform {
   constructor(context, config, logger) {
@@ -22,61 +57,37 @@ class GreenhouseApplier extends BasePlatform {
   async searchJobs() {
     const jobs = [];
     const keywords = this.config.keywords.map(k => k.toLowerCase());
+    let checked = 0;
 
-    const jobicyTags = ['node', 'react', 'javascript', 'typescript', 'backend',
-                        'fullstack', 'software-engineer', 'engineer'];
-    for (const tag of jobicyTags) {
+    for (const company of GREENHOUSE_COMPANIES) {
       try {
-        const res = await fetch(`https://jobicy.com/api/v2/remote-jobs?tag=${tag}&count=20&geo=usa`);
+        const res = await fetch(`https://boards-api.greenhouse.io/v1/boards/${company}/jobs?content=true`);
+        if (!res.ok) continue;
         const data = await res.json();
+        checked++;
+
         for (const job of (data.jobs || [])) {
-          const score = this.scoreJob({ title: job.jobTitle, description: job.jobDescription });
+          const combined = (job.title + ' ' + (job.content || '')).toLowerCase();
+          if (!keywords.some(k => combined.includes(k))) continue;
+          const score = this.scoreJob({ title: job.title, description: job.content });
           if (score === 0) continue;
-          const applyLink = job.jobApplyUrl || job.url;
           jobs.push({
-            id: `jobicy-${job.id}`,
-            title: job.jobTitle,
-            company: job.companyName,
-            location: job.jobGeo || 'Remote',
-            link: applyLink,
-            listingUrl: job.url,
+            id: `gh-${job.id}`,
+            title: job.title,
+            company: data.name || company,
+            location: job.location?.name || 'Remote',
+            link: job.absolute_url,
             platform: 'Greenhouse',
             matchScore: score,
           });
         }
-        this.logger.info(`Jobicy [${tag}]: ${(data.jobs||[]).length} raw jobs`);
-      } catch (err) { this.logger.error(`Jobicy fetch error (${tag}): ${err.message}`); }
+      } catch (_) {}
     }
 
-    // Arbeitnow — links go directly to company apply pages
-    try {
-      const res = await fetch('https://arbeitnow.com/api/job-board-api');
-      const data = await res.json();
-      for (const job of (data.data || []).slice(0, 100)) {
-        const combined = (job.title + ' ' + (job.description || '')).toLowerCase();
-        if (!keywords.some(k => combined.includes(k))) continue;
-        const score = this.scoreJob({ title: job.title, description: job.description });
-        if (score === 0) continue;
-        jobs.push({
-          id: job.slug || job.url,
-          title: job.title,
-          company: job.company_name,
-          location: job.location,
-          link: job.url,
-          platform: 'Greenhouse',
-          matchScore: score,
-        });
-      }
-    } catch (err) { this.logger.error(`Arbeitnow fetch error: ${err.message}`); }
-
-    // Deduplicate
+    this.logger.info(`Greenhouse: checked ${checked} companies, found ${jobs.length} matching jobs`);
     const seen = new Set();
-    const unique = jobs.filter(j => seen.has(j.id) ? false : seen.add(j.id));
-
-    // Only keep jobs on supported ATS platforms
-    const supported = unique.filter(j => isSupported(j.link));
-    this.logger.info(`Greenhouse: ${unique.length} total, ${supported.length} on supported ATS`);
-    return supported.sort((a, b) => b.matchScore - a.matchScore);
+    return jobs.filter(j => seen.has(j.id) ? false : seen.add(j.id))
+               .sort((a, b) => b.matchScore - a.matchScore);
   }
 
   async apply(job, coverLetter) {
@@ -84,21 +95,26 @@ class GreenhouseApplier extends BasePlatform {
     const p = this.config.profile;
     try {
       await page.goto(job.link, { waitUntil: 'domcontentloaded', timeout: 20000 });
-      const url = page.url();
-      this.logger.info(`🔗 Apply page: ${url}`);
+      this.logger.info(`🔗 Apply page: ${page.url()}`);
 
-      if (url.includes('greenhouse.io') || url.includes('boards.greenhouse.io')) {
-        return await this._applyGreenhouse(page, p, coverLetter);
-      } else if (url.includes('lever.co')) {
-        return await this._applyLever(page, p, coverLetter);
-      } else if (url.includes('ashbyhq.com') || url.includes('jobs.ashby')) {
-        return await this._applyAshby(page, p, coverLetter);
-      } else if (url.includes('workable.com')) {
-        return await this._applyWorkable(page, p, coverLetter);
-      } else if (url.includes('smartrecruiters.com')) {
-        return await this._applySmartRecruiters(page, p, coverLetter);
-      } else {
-        return await this._applyGeneric(page, p, coverLetter);
+      await this.safeType(page, '#first_name', p.firstName);
+      await this.safeType(page, '#last_name', p.lastName);
+      await this.safeType(page, '#email', p.email);
+      await this.safeType(page, '#phone', p.phone);
+      await this.safeType(page, '#job_application_answers_attributes_0_text_value', coverLetter);
+      await this.safeType(page, 'input[placeholder*="LinkedIn"]', p.linkedIn);
+
+      const upload = page.locator('input[type="file"]').first();
+      if (await upload.isVisible({ timeout: 2000 }).catch(() => false)) {
+        await upload.setInputFiles(this.config.resumePath);
+        await page.waitForTimeout(1500);
+      }
+
+      const btn = page.locator('#submit_app, button[type="submit"]').first();
+      if (await btn.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await btn.click();
+        await page.waitForTimeout(2000);
+        return true;
       }
     } catch (err) {
       this.logger.error(`Greenhouse apply error: ${err.message}`);
@@ -106,97 +122,6 @@ class GreenhouseApplier extends BasePlatform {
       await page.close();
     }
     return false;
-  }
-
-  async _applyGreenhouse(page, p, coverLetter) {
-    await this.safeType(page, '#first_name', p.firstName);
-    await this.safeType(page, '#last_name', p.lastName);
-    await this.safeType(page, '#email', p.email);
-    await this.safeType(page, '#phone', p.phone);
-    await this.safeType(page, '#job_application_answers_attributes_0_text_value', coverLetter);
-    await this.safeType(page, 'input[placeholder*="LinkedIn"]', p.linkedIn);
-    await this._uploadResume(page);
-    const btn = page.locator('#submit_app, button[type="submit"]').first();
-    if (await btn.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await btn.click(); await page.waitForTimeout(2000); return true;
-    }
-    return false;
-  }
-
-  async _applyLever(page, p, coverLetter) {
-    const applyUrl = page.url().replace(/\?.*$/, '') + '/apply';
-    await page.goto(applyUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
-    await this.safeType(page, 'input[name="name"]', `${p.firstName} ${p.lastName}`);
-    await this.safeType(page, 'input[name="email"]', p.email);
-    await this.safeType(page, 'input[name="phone"]', p.phone);
-    await this.safeType(page, 'input[name="urls[LinkedIn]"]', p.linkedIn);
-    await this.safeType(page, 'textarea[name="comments"]', coverLetter);
-    await this._uploadResume(page);
-    const btn = page.locator('button[type="submit"]').first();
-    if (await btn.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await btn.click(); await page.waitForTimeout(2000); return true;
-    }
-    return false;
-  }
-
-  async _applyAshby(page, p, coverLetter) {
-    await this.safeType(page, 'input[name="name"], input[placeholder*="Name"]', `${p.firstName} ${p.lastName}`);
-    await this.safeType(page, 'input[name="email"], input[placeholder*="Email"]', p.email);
-    await this.safeType(page, 'input[name="phone"], input[placeholder*="Phone"]', p.phone);
-    await this._uploadResume(page);
-    const btn = page.locator('button[type="submit"]').first();
-    if (await btn.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await btn.click(); await page.waitForTimeout(2000); return true;
-    }
-    return false;
-  }
-
-  async _applyWorkable(page, p, coverLetter) {
-    await this.safeType(page, 'input[name="firstname"]', p.firstName);
-    await this.safeType(page, 'input[name="lastname"]', p.lastName);
-    await this.safeType(page, 'input[name="email"]', p.email);
-    await this.safeType(page, 'input[name="phone"]', p.phone);
-    await this._uploadResume(page);
-    const btn = page.locator('button[type="submit"]').first();
-    if (await btn.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await btn.click(); await page.waitForTimeout(2000); return true;
-    }
-    return false;
-  }
-
-  async _applySmartRecruiters(page, p, coverLetter) {
-    await this.safeType(page, 'input[id="firstName"]', p.firstName);
-    await this.safeType(page, 'input[id="lastName"]', p.lastName);
-    await this.safeType(page, 'input[id="email"]', p.email);
-    await this.safeType(page, 'input[id="phoneNumber"]', p.phone);
-    await this._uploadResume(page);
-    const btn = page.locator('button[data-ui="submit-btn"], button[type="submit"]').first();
-    if (await btn.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await btn.click(); await page.waitForTimeout(2000); return true;
-    }
-    return false;
-  }
-
-  async _applyGeneric(page, p, coverLetter) {
-    await this.safeType(page, 'input[name*="first"], input[id*="first"]', p.firstName);
-    await this.safeType(page, 'input[name*="last"], input[id*="last"]', p.lastName);
-    await this.safeType(page, 'input[type="email"], input[name*="email"]', p.email);
-    await this.safeType(page, 'input[type="tel"], input[name*="phone"]', p.phone);
-    await this.safeType(page, 'textarea', coverLetter);
-    await this._uploadResume(page);
-    const btn = page.locator('button[type="submit"], input[type="submit"]').first();
-    if (await btn.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await btn.click(); await page.waitForTimeout(2000); return true;
-    }
-    return false;
-  }
-
-  async _uploadResume(page) {
-    const upload = page.locator('input[type="file"]').first();
-    if (await upload.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await upload.setInputFiles(this.config.resumePath);
-      await page.waitForTimeout(1500);
-    }
   }
 
   async safeType(page, selector, value) {
@@ -216,77 +141,53 @@ class LeverApplier extends BasePlatform {
 
   async searchJobs() {
     const jobs = [];
+    const keywords = this.config.keywords.map(k => k.toLowerCase());
+    let checked = 0;
 
-    const remotiveTags = ['node', 'react', 'full-stack', 'backend', 'javascript',
-                          'typescript', 'software-engineer', 'web-developer'];
-    for (const tag of remotiveTags) {
+    for (const company of LEVER_COMPANIES) {
       try {
-        const res = await fetch(`https://remotive.com/api/remote-jobs?search=${tag}&limit=20`);
+        const res = await fetch(`https://api.lever.co/v0/postings/${company}?mode=json`);
+        if (!res.ok) continue;
         const data = await res.json();
-        for (const job of (data.jobs || [])) {
-          const score = this.scoreJob({ title: job.title, description: job.description });
+        checked++;
+
+        for (const job of (Array.isArray(data) ? data : [])) {
+          const combined = ((job.text || '') + ' ' + (job.descriptionPlain || '')).toLowerCase();
+          if (!keywords.some(k => combined.includes(k))) continue;
+          const score = this.scoreJob({ title: job.text, description: job.descriptionPlain });
           if (score === 0) continue;
           jobs.push({
-            id: `remotive-${job.id}`,
-            title: job.title,
-            company: job.company_name,
-            location: job.candidate_required_location || 'Remote',
-            link: job.url,
+            id: `lever-${job.id}`,
+            title: job.text,
+            company: company,
+            location: job.categories?.location || 'Remote',
+            link: job.hostedUrl,
             platform: 'Lever',
             matchScore: score,
           });
         }
-        this.logger.info(`Remotive [${tag}]: ${(data.jobs||[]).length} raw jobs`);
-      } catch (err) { this.logger.error(`Remotive fetch error (${tag}): ${err.message}`); }
+      } catch (_) {}
     }
 
-    // Deduplicate
+    this.logger.info(`Lever: checked ${checked} companies, found ${jobs.length} matching jobs`);
     const seen = new Set();
-    const unique = jobs.filter(j => seen.has(j.id) ? false : seen.add(j.id));
-
-    // Only keep jobs on supported ATS platforms
-    const supported = unique.filter(j => isSupported(j.link));
-    this.logger.info(`Lever: ${unique.length} total, ${supported.length} on supported ATS`);
-    return supported.sort((a, b) => b.matchScore - a.matchScore);
+    return jobs.filter(j => seen.has(j.id) ? false : seen.add(j.id))
+               .sort((a, b) => b.matchScore - a.matchScore);
   }
 
   async apply(job, coverLetter) {
     const page = await this.context.newPage();
     const p = this.config.profile;
     try {
-      await page.goto(job.link, { waitUntil: 'domcontentloaded', timeout: 20000 });
-      const url = page.url();
-      this.logger.info(`🔗 Apply page: ${url}`);
+      const applyUrl = job.link.replace(/\?.*$/, '') + '/apply';
+      await page.goto(applyUrl, { waitUntil: 'domcontentloaded', timeout: 20000 });
+      this.logger.info(`🔗 Apply page: ${page.url()}`);
 
-      if (url.includes('lever.co')) {
-        const applyUrl = url.replace(/\?.*$/, '') + '/apply';
-        await page.goto(applyUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
-        await this.safeType(page, 'input[name="name"]', `${p.firstName} ${p.lastName}`);
-        await this.safeType(page, 'input[name="email"]', p.email);
-        await this.safeType(page, 'input[name="phone"]', p.phone);
-        await this.safeType(page, 'input[name="urls[LinkedIn]"]', p.linkedIn);
-        await this.safeType(page, 'textarea[name="comments"]', coverLetter);
-      } else if (url.includes('greenhouse.io')) {
-        await this.safeType(page, '#first_name', p.firstName);
-        await this.safeType(page, '#last_name', p.lastName);
-        await this.safeType(page, '#email', p.email);
-        await this.safeType(page, '#phone', p.phone);
-        await this.safeType(page, '#job_application_answers_attributes_0_text_value', coverLetter);
-        await this.safeType(page, 'input[placeholder*="LinkedIn"]', p.linkedIn);
-      } else if (url.includes('ashbyhq.com') || url.includes('jobs.ashby')) {
-        await this.safeType(page, 'input[name="name"], input[placeholder*="Name"]', `${p.firstName} ${p.lastName}`);
-        await this.safeType(page, 'input[name="email"], input[placeholder*="Email"]', p.email);
-        await this.safeType(page, 'input[name="phone"], input[placeholder*="Phone"]', p.phone);
-      } else if (url.includes('workable.com')) {
-        await this.safeType(page, 'input[name="firstname"]', p.firstName);
-        await this.safeType(page, 'input[name="lastname"]', p.lastName);
-        await this.safeType(page, 'input[name="email"]', p.email);
-        await this.safeType(page, 'input[name="phone"]', p.phone);
-      } else {
-        await this.safeType(page, 'input[type="email"]', p.email);
-        await this.safeType(page, 'input[type="tel"]', p.phone);
-        await this.safeType(page, 'textarea', coverLetter);
-      }
+      await this.safeType(page, 'input[name="name"]', `${p.firstName} ${p.lastName}`);
+      await this.safeType(page, 'input[name="email"]', p.email);
+      await this.safeType(page, 'input[name="phone"]', p.phone);
+      await this.safeType(page, 'input[name="urls[LinkedIn]"]', p.linkedIn);
+      await this.safeType(page, 'textarea[name="comments"]', coverLetter);
 
       const upload = page.locator('input[type="file"]').first();
       if (await upload.isVisible({ timeout: 2000 }).catch(() => false)) {
@@ -294,12 +195,17 @@ class LeverApplier extends BasePlatform {
         await page.waitForTimeout(1500);
       }
 
-      const btn = page.locator('button[type="submit"], input[type="submit"]').first();
+      const btn = page.locator('button[type="submit"]').first();
       if (await btn.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await btn.click(); await page.waitForTimeout(2000); return true;
+        await btn.click();
+        await page.waitForTimeout(2000);
+        return true;
       }
-    } catch (err) { this.logger.error(`Lever apply error: ${err.message}`); }
-    finally { await page.close(); }
+    } catch (err) {
+      this.logger.error(`Lever apply error: ${err.message}`);
+    } finally {
+      await page.close();
+    }
     return false;
   }
 
