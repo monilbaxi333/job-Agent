@@ -59,11 +59,9 @@ class JobAgent {
       storageState,
     });
 
-    const coverLetter = await this.coverLetterGen.generate(job);
-    this.logger.info(`📝 Cover letter generated for: ${job.title} @ ${job.company}`);
-    this.logger.info(`🔗 Apply link: ${job.link}`);
-    // Attempt apply
-    const success = await platform.apply(job, coverLetter);
+    if (!config.profile) throw new Error('config.profile is missing');
+    this.coverLetterGen = new CoverLetterGenerator(config.profile);
+    this.logger.info('✅ Cover letter generator initialized');
   }
 
   async run() {
