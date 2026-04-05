@@ -74,5 +74,10 @@ module.exports = {
     'visa sponsorship', 'sponsor visa', 'will sponsor', 'h1b', 'h-1b',
     'work authorization', 'visa support'
   ],
+  blacklist: [
+  'meta', 'facebook', 'gitlab', 'google', 'amazon', 'apple', 'microsoft',
+  'netflix', 'uber', 'airbnb', 'aecom', 'oracle', 'ibm', 'salesforce',
+  'intel', 'qualcomm', 'cisco', 'vmware', 'workday', 'servicenow',
+  ],
   requireVisa: false,   // set false to get more jobs while testing
 };

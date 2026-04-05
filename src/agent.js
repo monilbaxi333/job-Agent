@@ -31,36 +31,39 @@ class JobAgent {
     });
 
     // Only load session if file exists and is valid JSON
-let storageState = undefined;
-const fs = require('fs');
-if (config.sessionFile && fs.existsSync(config.sessionFile)) {
-  try {
-    const raw = fs.readFileSync(config.sessionFile, 'utf8').trim();
-    if (raw && raw.startsWith('{')) {
-      JSON.parse(raw); // validate
-      storageState = config.sessionFile;
-      this.logger.info('✅ Session file loaded');
+    let storageState = undefined;
+    const fs = require('fs');
+    if (config.sessionFile && fs.existsSync(config.sessionFile)) {
+      try {
+        const raw = fs.readFileSync(config.sessionFile, 'utf8').trim();
+        if (raw && raw.startsWith('{')) {
+          JSON.parse(raw); // validate
+          storageState = config.sessionFile;
+          this.logger.info('✅ Session file loaded');
+        } else {
+          this.logger.info('⚠️  Session file empty — will log in fresh');
+        }
+      } catch (e) {
+        this.logger.info('⚠️  Session file corrupt — will log in fresh');
+      }
     } else {
-      this.logger.info('⚠️  Session file empty — will log in fresh');
+      this.logger.info('⚠️  No session file — will log in fresh');
     }
-  } catch (e) {
-    this.logger.info('⚠️  Session file corrupt — will log in fresh');
-  }
-} else {
-  this.logger.info('⚠️  No session file — will log in fresh');
-}
 
-this.context = await this.browser.newContext({
-  userAgent:
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) ' +
-    'AppleWebKit/537.36 (KHTML, like Gecko) ' +
-    'Chrome/120.0.0.0 Safari/537.36',
-  viewport: { width: 1280, height: 800 },
-  storageState,
-});
+    this.context = await this.browser.newContext({
+      userAgent:
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) ' +
+        'AppleWebKit/537.36 (KHTML, like Gecko) ' +
+        'Chrome/120.0.0.0 Safari/537.36',
+      viewport: { width: 1280, height: 800 },
+      storageState,
+    });
 
-    this.coverLetterGen = new CoverLetterGenerator(config.profile);
-    this.logger.info('✅ Browser initialized');
+    const coverLetter = await this.coverLetterGen.generate(job);
+    this.logger.info(`📝 Cover letter generated for: ${job.title} @ ${job.company}`);
+    this.logger.info(`🔗 Apply link: ${job.link}`);
+    // Attempt apply
+    const success = await platform.apply(job, coverLetter);
   }
 
   async run() {
@@ -132,9 +135,8 @@ this.context = await this.browser.newContext({
       return false;
     }
 
-    // Skip blacklisted companies
-    if (config.blacklist?.includes(job.company.toLowerCase())) {
-      this.logger.info(`⏭  Blacklisted: ${job.company}`);
+    if (config.blacklist?.some(b => job.company?.toLowerCase().includes(b))) {
+      this.logger.info(`⏭  Blacklisted company: ${job.company}`);
       return false;
     }
 

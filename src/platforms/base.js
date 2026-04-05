@@ -24,6 +24,14 @@ class BasePlatform {
       this.logger.info(`🚫 Blocked "${job.title}" — matched blocklist: "${blocked}"`);
       return 0;
     }
+    // Add to the hard filters section, after the existing blocklist check:
+    const titleBlockPatterns = [
+      /\bstaff\b/, /\btech lead\b/, /\btechnical lead/,
+      /\brust\b/, /\biOS\b/, /\bandroid\b/, /\bmachine learning\b/,
+      /\bdata engineer\b/, /\bdevops\b/, /\bsecurity engineer\b/,
+      /\bcapacity\b/, /\bsubstation\b/, /\bcustomer success\b/,
+    ];
+    if (titleBlockPatterns.some(p => p.test(title))) return 0;
 
     if (this.config.requireVisa) {
       const visaKws = this.config.visaKeywords || [];
